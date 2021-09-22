@@ -23,7 +23,7 @@ void reset(int type) {
 void forward(double distance, double speed, double degree) {
   reset(0);
 
-  double left_motor_power;
+  double left_motor_power; 
   double right_motor_power = speed;
   double modifier;
 

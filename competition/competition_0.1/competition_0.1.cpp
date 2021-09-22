@@ -38,7 +38,7 @@ void user_control() {
     left_speed = Controller1.Axis1.position(pct);
     right_speed = Controller1.Axis3.position(pct);
 
-    if (std::abs(Controller1.Axis1.position(pct) - Controller1.Axis3.position(pct)) < 5 && Controller1.Axis1.position(pct) > 10) {
+    if (std::abs(Controller1.Axis1.position(pct) - Controller1.Axis3.position(pct)) < 5 && std::abs(Controller1.Axis1.position(pct) > 10)) {
       drive_error = left_speed - right_speed;
       drive_derivative = previous_drive_error - drive_error;
       previous_drive_error = drive_error;

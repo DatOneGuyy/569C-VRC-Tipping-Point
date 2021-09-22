@@ -2,15 +2,15 @@
 // Robot Configuration:
 // [Name]               [Type]        [Port(s)]
 // Controller1          controller                    
-// inertial5            inertial      5               
 // front_left           motor         11              
-// front_right          motor         13              
 // back_left            motor         12              
+// front_right          motor         13              
 // back_right           motor         14              
+// inertial5            inertial      5               
 // ---- END VEXCODE CONFIGURED DEVICES ----
 
 #include "vex.h"
-#include "auton_library.h"
+#include "auton_functions.h"
 
 using namespace vex;
 
@@ -29,25 +29,29 @@ int left_speed = 0;
 int right_speed = 0;
 double drive_kp = 0.3;
 double drive_kd = 0.05;
-int drive_error = 0;
-int previous_drive_error;
-int drive_derivative = 0;
+double drive_error = 0;
+double previous_drive_error;
+double drive_derivative = 0;
 
 void user_control() {
-  left_speed = Controller1.Axis1.position(pct);
-  right_speed = Controller1.Axis3.position(pct);
-  if (std::abs(Controller1.Axis1.position(pct) - Controller1.Axis3.position(pct)) < 5) {
-    drive_error = left_speed - right_speed;
-    drive_derivative = previous_drive_error - drive_error;
-    previous_drive_error = drive_error;
-    drive_derivative = 
-    right_speed = left_speed;
-}
+  while (1) {
+    left_speed = Controller1.Axis1.position(pct);
+    right_speed = Controller1.Axis3.position(pct);
 
-  front_left.spin(fwd, map((double)Controller1.Axis1.position(pct)), pct);
-  back_left.spin(fwd, map((double)Controller1.Axis1.position(pct)), pct);
-  front_right.spin(fwd, map((double)Controller1.Axis3.position(pct)), pct);
-  back_right.spin(fwd, map((double)Controller1.Axis3.position(pct)), pct);
+    if (std::abs(Controller1.Axis1.position(pct) - Controller1.Axis3.position(pct)) < 5 && Controller1.Axis1.position(pct) > 10) {
+      drive_error = left_speed - right_speed;
+      drive_derivative = previous_drive_error - drive_error;
+      previous_drive_error = drive_error;
+      drive_derivative = 
+      right_speed = left_speed;
+      left_speed = left_speed - drive_error * drive_kp - drive_derivative * drive_kd;
+    }
+
+    front_left.spin(fwd, map(left_speed), pct);
+    back_left.spin(fwd, map(left_speed), pct);
+    front_right.spin(fwd, map((double)right_speed), pct);
+    back_right.spin(fwd, map((double)right_speed), pct);
+  }
 }
 
 int main() {
@@ -56,9 +60,9 @@ int main() {
 
   pre_auton();
 
-  while(1) {
+  while (1) {
 
-    user_control();
+    wait(100, msec);
 
   }
 }

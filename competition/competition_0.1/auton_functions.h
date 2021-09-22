@@ -209,3 +209,99 @@ void right(double speed, double distance, double degree) {
   back_left.stop();
   
 }
+
+//right speed: 1, left speed: ratio * right speed (ratio < 1), distance: final right encoder value
+void swing_left(double speed, double ratio, double distance, double degree) {
+  reset(0);
+
+  double left_motor_power; 
+  double right_motor_power = speed;
+  double modifier;
+
+  double kp = 0.25;
+  double ki = 0.02;
+  double kd = 0.03;
+  double kg = 0.01;
+
+  double left_position = std::max(front_left.position(deg), back_left.position(deg));
+  double right_position = std::max(front_right.position(deg), back_right.position(deg));
+
+  double error;
+  double integral = 0;
+  double derivative;
+  double last_error;
+
+  while (average(left_position / ratio, right_position) <= distance) {
+
+    left_position = std::max(front_left.position(deg), back_left.position(deg));
+    right_position = std::max(front_right.position(deg), back_right.position(deg));
+
+    modifier = curve(degree, 100 * average(left_position, right_position) / distance) * speed / 100;
+
+    error = left_position - right_position;
+    integral += error;
+    derivative = error - last_error;
+    last_error = error; 
+
+    left_motor_power = modifier * ratio;
+    right_motor_power = modifier + error * kp + integral * ki + derivative * kd - kg * inertial5.angle(deg);
+
+    front_right.spin(fwd, right_motor_power, pct);
+    back_right.spin(fwd, right_motor_power, pct);
+    front_left.spin(fwd, left_motor_power, pct);
+    back_left.spin(fwd, left_motor_power, pct);
+  }
+
+  front_right.stop();
+  back_right.stop();
+  front_left.stop();
+  back_left.stop();
+}
+
+//left speed: 1, right speed: ratio * left speed (ratio < 1), distance: final left encoder value
+void swing_right(double speed, double ratio, double distance, double degree) {
+  reset(0);
+
+  double left_motor_power; 
+  double right_motor_power = speed;
+  double modifier;
+
+  double kp = 0.25;
+  double ki = 0.02;
+  double kd = 0.03;
+  double kg = 0.01;
+
+  double left_position = std::max(front_left.position(deg), back_left.position(deg));
+  double right_position = std::max(front_right.position(deg), back_right.position(deg));
+
+  double error;
+  double integral = 0;
+  double derivative;
+  double last_error;
+
+  while (average(right_position / ratio, left_position) <= distance) {
+
+    left_position = std::max(front_left.position(deg), back_left.position(deg));
+    right_position = std::max(front_right.position(deg), back_right.position(deg));
+
+    modifier = curve(degree, 100 * average(left_position, right_position) / distance) * speed / 100;
+
+    error = left_position - right_position;
+    integral += error;
+    derivative = error - last_error;
+    last_error = error; 
+
+    left_motor_power = modifier;
+    right_motor_power = (modifier + error * kp + integral * ki + derivative * kd - kg * inertial5.angle(deg) * ratio);
+
+    front_right.spin(fwd, right_motor_power, pct);
+    back_right.spin(fwd, right_motor_power, pct);
+    front_left.spin(fwd, left_motor_power, pct);
+    back_left.spin(fwd, left_motor_power, pct);
+  }
+
+  front_right.stop();
+  back_right.stop();
+  front_left.stop();
+  back_left.stop();
+}

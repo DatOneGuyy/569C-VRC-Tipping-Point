@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+	<head>
+
+	</head>
+	<body>
+		<form> 
+			Raw Data: 
+			<input id="raw_data" type="text" maxlength="2147483647">
+			<br>
+			<br>
+			<input id="data_submit" type="button" value="Compute" onclick="run()">
+		</form>
+		<br>
+		<br>
+		<p id="output"></p>
+		<script src="https://cdn.jsdelivr.net/npm/mathjs@9.4.4/lib/browser/math.js"></script>
+		<script>
+			var run = function() {
+				var t = new Date();
+				var m = t.getTime();
+				console.log("Crunching numbers... ");
+
+				var num_teams;
+				var matches = [];
+				var unindexed_matches = [];
+				var unindexed_teams = [];
+
+				var invert = function(x) {
+					return x === 0 ? 1 : 0;
+				}
+
+				var read_data = function() {
+					var data = document.getElementById('raw_data').value.replace(/\s+/g, ' ');
+					var data_temp = data;
+					
+					var temp = "";
+					var team_index = [];
+					var counter = 0;
+					var match_counter = 0;
+					var match_data = [];
+					var score_temp = ["", ""];
+
+					for (var i = 0; i < data_temp.length; i++) {
+						if (counter < 4) {
+							if (data_temp[i] !== " ") {
+								temp += data_temp[i];
+							} else {
+								team_index.push(temp);
+								temp = "";
+								counter++;
+							}
+						} else if (counter < 5) {
+							if (data_temp[i] !== " ") {
+								score_temp[0] += data_temp[i];
+							} else {
+								score_temp[0] = parseInt(score_temp[0], 10);
+								counter++;
+							}
+						} else if (counter < 6) {
+							if (data_temp[i] !== " ") {
+								score_temp[1] += data_temp[i];
+							} else {
+								score_temp[1] = parseInt(score_temp[1], 10);
+								counter++;
+							}
+						} else {
+							counter = 0;
+							match_data.push({
+								teams: [team_index[0], team_index[1], team_index[2], team_index[3]],
+								score: [score_temp[0], score_temp[1]]
+							});
+							score_temp = ["", ""]
+							team_index = [];
+							temp = "";
+							temp += data_temp[i];
+						}
+					}
+					counter = 0;
+					match_data.push({
+						teams: [team_index[0], team_index[1], team_index[2], team_index[3]],
+						score: [score_temp[0], score_temp[1]]
+					});
+					score_temp = ["", ""]
+					team_index = [];
+					temp = "";
+
+					var team_list = [];
+
+					for (var i = 0; i < match_data.length; i++) {
+						for (var j = 0; j < match_data[i].teams.length; j++) {
+							if (team_list.indexOf(match_data[i].teams[j]) === -1) {
+								team_list.push(match_data[i].teams[j]);
+							}
+						}
+					}
+
+					num_teams = team_list.length;
+					unindexed_matches = match_data;
+					unindexed_teams = team_list;
+					var indexed_match_data = match_data;
+
+
+					for (var i = 0; i < indexed_match_data.length; i++) {
+						for (var j = 0; j < indexed_match_data[i].teams.length; j++) {
+							indexed_match_data[i].teams[j] = team_list.indexOf(indexed_match_data[i].teams[j]);
+						}
+					}
+
+					matches = indexed_match_data;
+
+					return match_data;				
+				}
+
+				read_data();
+
+				var teams = matches[0].teams.length;
+
+				var compute_alliance = function(x) {
+				    return x < 2 ? x === 0 ? 1 : 0 : x === 2 ? 3 : 2;
+				};
+
+				var temp = 0;
+				var _temp = [];
+				var temp_matches = [];
+
+				var p = [];
+				var main = [];
+				var _main = [];
+
+				for (var i = 0; i < num_teams; i++) {
+				    main.push([]);
+				    _main.push([]);
+				    for (var j = 0; j < num_teams; j++) {
+				        main[i].push(0);
+				        _main[i].push(0);
+				    }
+				}
+
+				var fill_main = function(team_number) {
+				    for (var i = 0; i < matches.length; i++) {
+				        if (matches[i].teams.indexOf(team_number) > -1) {
+				            temp_matches.push(i);
+				            _temp.push(compute_alliance(matches[i].teams.indexOf(team_number)));
+				        }
+				    }
+				    for (var j = 0; j < temp_matches.length; j++) {
+				        main[team_number][team_number]++;
+				        main[team_number][matches[j].teams[_temp[j]]]++;
+				    }
+				    temp_matches = [];
+				    _temp = [];
+				};
+
+				for (var i = 0; i < num_teams; i++) {
+				    fill_main(i);
+				}
+
+				for (var j = 0; j < num_teams; j++) {
+				    for (var i = 0; i < matches.length; i++) {
+				        if (matches[i].teams.indexOf(j) > 1) {
+				            temp += matches[i].score[1] - matches[i].score[0];
+				        } else if (matches[i].teams.indexOf(j) > -1) {
+				            temp += matches[i].score[0] - matches[i].score[1];
+				        }
+				    }
+				    p.push(temp);
+				    temp = 0;
+				}
+
+				main = math.matrix(main);
+				console.log(main);
+				p = math.matrix(p);
+
+				var main_inverse = math.inv(main);
+				var _output = math.multiply(p, main_inverse);
+				var output = math.multiply(p, main_inverse);
+
+				var stats = [];
+				for (var i = 0; i < num_teams; i++) {
+					stats.push([0, 0, 0])
+				}
+
+				var result = function(match_number, team_number) {
+					var alliance = Math.floor(matches[match_number].teams.indexOf(team_number) / 2);
+					if (matches[match_number].score[alliance] > matches[match_number].score[invert(alliance)]) {
+						return 0;
+					} else if (matches[match_number].score[alliance] < matches[match_number].score[invert(alliance)]) {
+						return 1;
+					} else {
+						return 2;
+					}
+				}
+
+				for (var j = 0; j < num_teams; j++) {
+					for (var i = 0; i < matches.length; i++) {
+						if (matches[i].teams.indexOf(j) > -1) {
+							stats[j][result(i, j)]++;
+						}
+					}
+				}
+
+				var rank = output._data.sort(function(a, b) {return b - a;});
+				for (var i = 0; i < rank.length; i++) {
+					console.log((i + 1) + ". Team " + unindexed_teams[_output._data.indexOf(rank[i])] + ": " + (Math.round(rank[i] * 1000) / 1000) + ", W-L-T: " + stats[_output._data.indexOf(rank[i])][0] + "-" + stats[_output._data.indexOf(rank[i])][1] + "-" + stats[_output._data.indexOf(rank[i])][2]);
+				}
+
+				var wp_rankings_complex = [];
+
+				var rankings = function() {
+					for (var i = 0; i < stats.length; i++) {
+						wp_rankings_complex.push([]);
+						wp_rankings_complex[i].push(stats[i][0] * 2 + stats[i][2]);
+						wp_rankings_complex[i].push(i);
+					}
+				}
+
+				rankings();
+
+				wp_rankings_complex = wp_rankings_complex.sort(function(a, b) {return b[0] - a[0];});
+				for (var i = 0; i < wp_rankings_complex.length; i++) {
+					console.log((i + 1) + ". Team " + unindexed_teams[wp_rankings_complex[i][1]] + ": " + (Math.round(1000 * wp_rankings_complex[i][0]) / 1000) + "WP");
+				}
+
+				var get_matches = function(team_number) {
+					var margin = function(x, y) {
+						if (x + y !== 0) {
+							return (x - y) / (x + y);
+						} else {
+							return 0;
+						}
+					}
+					for (var i = 0; i < matches.length; i++) {
+						if (matches[i].teams.indexOf(team_number) > -1) {
+							var team_ccwm = _output._data[team_number];
+							var alliance_ccwm = _output._data[matches[i].teams[compute_alliance(matches[i].teams.indexOf(team_number))]];
+							var win = (matches[i].teams.indexOf(team_number) > 1 && matches[i].score[1] > matches[i].score[0]) || (matches[i].teams.indexOf(team_number) < 2 && matches[i].score[0] > matches[i].score[1]) ? "(Won)" : "(Lost)";
+							console.log("Match #" + i + ": " + unindexed_teams[matches[i].teams[0]] + " " + unindexed_teams[matches[i].teams[1]] + " vs. " + unindexed_teams[matches[i].teams[2]] + " " + unindexed_teams[matches[i].teams[3]] + ", " + matches[i].score[0] + "-" + matches[i].score[1] + ", " + "Alliance carried by " + (team_ccwm > alliance_ccwm ? team_number : matches[i].teams[compute_alliance(matches[i].teams.indexOf(team_number))]) + " by " + (Math.round(10000 * Math.abs(margin(team_ccwm, alliance_ccwm))) / 100) + "% " + win);
+						}
+					}
+				}
+
+				var t1 = new Date();
+				var m1 = t1.getTime();
+
+				console.log("Done. (" + (m1 - m) + "ms)");
+			}
+		</script>
+	</body>
+</html>

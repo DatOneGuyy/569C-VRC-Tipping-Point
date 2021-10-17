@@ -1,3 +1,5 @@
+#pragma once
+
 #include "vex.h"
 #include <cmath>
 
@@ -16,11 +18,19 @@ double angleConvert(double angle) {
   return angle > 180 ? angle - 360 : angle;
 }
 
+double normalize(double x) {
+  return x == 0 ? 0 : std::abs(x) / x;
+}
+
 //curve of degree 2n, higher -> faster with diminishing returns, lower -> slower but smooth deceleration
 //domain: [0, 100], proportion of path completed
 //range: [0, 100], multiplier for speed
 double curve(double n, double x) { 
-  return std::min(std::pow(std::pow(100, 2 * n) - std::pow(x, 2 * n), 1 / (2 * n)), 10 + 1 * x);
+  if (x < 50) {
+    return 15 + 5 * x;
+  } else {
+    return std::pow(std::pow(100, 2 * n) - std::pow(x, 2 * n), 1 / (2 * n));
+  }
 }
 
 double linear_accel(double x) {

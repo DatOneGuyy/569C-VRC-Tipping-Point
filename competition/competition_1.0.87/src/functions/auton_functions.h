@@ -1,25 +1,46 @@
+#pragma once
+
 #include "vex.h"
 #include "math_library.h"
+#include <iostream>
 
 using namespace vex;
 
-void reset(int type) {
-  switch (type) {
-    case 1:
-      front_left.resetRotation();
-      front_right.resetRotation();
-      back_left.resetRotation();
-      back_right.resetRotation();
-    default:
-      front_left.resetRotation();
-      front_right.resetRotation();
-      back_left.resetRotation();
-      back_right.resetRotation();
-      inertial5.resetHeading();
-      break;
+void forward_(int dist, int speed) 
+{
+  Drivetrain.driveFor(directionType::fwd, dist, distanceUnits::in, speed, velocityUnits::pct);
+}
+
+void move_back_arm(int dist, bool dir) {
+  while (back_arm.position(degrees) > 5 * dist) {
+    back_arm.spin(fwd, dir * 12.0, volt);
   }
 }
 
+void move_back_arm_up(int dist, bool dir) {
+  while (back_arm.position(degrees) > 5 * dist) {
+    back_arm.spin(fwd, dir * 12.0, volt);
+  }
+}
+
+
+
+void backward(int dist, int speed)
+{
+  Drivetrain.driveFor(directionType::rev, dist, distanceUnits::in, speed, velocityUnits::pct);
+}
+
+void turnLeft(int angle, int speed)
+{
+  Drivetrain.turn(turnType::left, speed, velocityUnits::pct);
+}
+
+void turnRight(int angle, int speed)
+{
+  Drivetrain.turn(turnType::right, speed, velocityUnits::pct);
+}
+
+/*
 void drive_forward(double distance, double speed, double degree) {
   reset(0);
 
@@ -55,9 +76,6 @@ void drive_forward(double distance, double speed, double degree) {
     left_motor_power = modifier;
     right_motor_power = modifier + error * kp + integral * ki + derivative * kd - kg * angleConvert(inertial5.angle(deg));
 
-    Brain.Screen.print(angleConvert(inertial5.angle(deg)));
-    Brain.Screen.newLine();
-
     front_right.spin(fwd, right_motor_power, pct);
     back_right.spin(fwd, right_motor_power, pct);
     front_left.spin(fwd, left_motor_power, pct);
@@ -72,6 +90,25 @@ void drive_forward(double distance, double speed, double degree) {
 }
 
 void backward(double distance, double speed, double degree) {
+  reset(0);
+
+  while (-back_left.position(deg) < distance) {
+    Brain.Screen.print(speed);
+
+    front_left.spin(vex::directionType::rev, speed, pct);
+    front_right.spin(vex::directionType::rev, speed, pct);
+    back_left.spin(vex::directionType::rev, speed, pct);
+    back_right.spin(vex::directionType::rev, speed, pct);
+  }
+
+  front_right.stop(vex::brakeType::hold);
+  back_right.stop(vex::brakeType::hold);
+  front_left.stop(vex::brakeType::hold);
+  back_left.stop(vex::brakeType::hold);
+
+}
+
+void backward_(double distance, double speed, double degree) {
   reset(0);
 
   double left_motor_power;
@@ -93,6 +130,8 @@ void backward(double distance, double speed, double degree) {
 
   inertial5.resetHeading();
 
+  Brain.Screen.print(std::abs(daverage(left_position, right_position)) <= distance);
+
   while (std::abs(daverage(left_position, right_position)) <= distance) {
 
     left_position = std::min(front_left.position(deg), back_left.position(deg));
@@ -105,12 +144,16 @@ void backward(double distance, double speed, double degree) {
     derivative = error - last_error;
     last_error = error; 
 
-    left_motor_power = modifier;
-    right_motor_power = modifier + error * kp + kg * angleConvert(inertial5.heading());
+    left_motor_power = speed;
+    right_motor_power = speed;// + error * kp;//kg * angleConvert(inertial5.heading());.
+
+    Brain.Screen.print(speed);
 
     if (left_motor_power > 0 || right_motor_power > 0) {
       break;
-    } 
+    }
+
+    Brain.Screen.print("k");
 
     front_right.spin(fwd, right_motor_power, pct);
     back_right.spin(fwd, right_motor_power, pct);
@@ -119,8 +162,6 @@ void backward(double distance, double speed, double degree) {
 
     wait(10, msec);
   }
-  Brain.Screen.clearLine(0);
-  Brain.Screen.print("%d %d", error, angleConvert(inertial5.heading(deg)));
 
   front_right.stop();
   back_right.stop();
@@ -266,10 +307,8 @@ void speed_left_curve_reverse(double speed, double degree, double distance, doub
     wait(10, msec);
   }
 
-  if (!in_sequence) {/*
-    front_right.stop();
-    back_right.stop();
-    front_left.stop();
-    back_left.stop();*/
-  }
-}
+  front_right.stop();
+  back_right.stop();
+  front_left.stop();
+  back_left.stop();
+}*/

@@ -7,5 +7,9 @@ void auton_back_arm_up(void);
 void auton_back_arm_down(void);
 void auton_four_bar_up(void);
 void auton_four_bar_down(void);
+void auton_pneumatics_open(void);
+void auton_pneumatics_close(void);
+void auton_intake_spin(void);
+void auton_intake_stop(void);
 
 #endif

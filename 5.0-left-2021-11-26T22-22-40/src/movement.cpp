@@ -32,6 +32,22 @@ void auton_four_bar_up() {
   four_bar.stop(hold);
 }
 
+void auton_claw_open() {
+  front_pneumatics.set(true); 
+}
+
+void auton_claw_close() {
+  front_pneumatics.set(false);
+}
+
+void auton_intake_spin() {
+  intake.spin(fwd, 12.0, volt); 
+}
+
+void auton_intake_stop() {
+  intake.stop(coast);  
+}
+
 void run_action(double current_percentage, double percentage, int index) {
   Brain.Screen.printAt(300, 100, "%f, %f", current_percentage * 100, percentage);
   if (current_percentage * 100 >= percentage) {

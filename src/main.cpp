@@ -3,148 +3,169 @@
 
 using namespace okapi;
 
-Controller controller;
+Motor back_arm(-14);
+MotorGroup four_bar({-10, 2});
+Motor intake(19);
+ADIButton back_arm_limit('F');
+ADIButton four_bar_limit('B');
+ADIButton four_bar_limit2('G');
+pros::ADIDigitalOut front_pneumatics('H');
 
-std::shared_ptr<OdomChassisController> drive =
-	ChassisControllerBuilder()
-		.withMotors(
-			{11, 1},
-			{-6, -16}
-		)
-		.withGains(
-			{0.001, 0, 0.0001}, // Distance controller gains
-			{0.001, 0, 0.0001}, // Turn controller gains
-			{0.001, 0, 0.0001}  // Angle controller gains (helps drive straight)
-		)
-		.withDimensions({AbstractMotor::gearset::green, 2}, {{3.25_in, 15.125_in}, imev5GreenTPR})
-		.withOdometry()
-		.buildOdometry();
-
-Motor four_bar(2);
-Motor four_bar2(-12);
-ADIButton four_bar_limit('F');
-ADIButton four_bar_limit2('E');
-ControllerButton buttonL1(ControllerDigital::L1);
-
-bool four_bar_running, four_bar_state, L1, L1p = false;
-
-void run_four_bar() {
+/**
+ * A callback function for LLEMU's center button.
+ *
+ * When this callback is fired, it will toggle line 2 of the LCD text between
+ * "I was pressed!" and nothing.
+ */
+void four_bar_movement(void*) {
+	bool arm_state = false;
+	ControllerButton L1(ControllerDigital::L1);
 	four_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
-	four_bar2.setBrakeMode(AbstractMotor::brakeMode::hold);
 
-	four_bar.setGearing(AbstractMotor::gearset::red);
-	four_bar2.setGearing(AbstractMotor::gearset::red);
+	bool x = false;
+	bool y = false;
 
-	L1 = buttonL1.isPressed();
+	int timeout_counter = 5;
 
-	if (L1 && !L1p) {
-		four_bar_running = true; //On button press, activate movement
-	}
+	while (true) {
+		x = L1.isPressed();
 
-	if (four_bar_running) { //Run while movement is active
-		if (four_bar_limit2.isPressed() && !four_bar_state) { //If top limit is pressed and arm is still considered down
+    if (x && !y && !arm_state) {
+      while (!four_bar_limit2.isPressed()) {
+        four_bar.moveVelocity(200);
+				timeout_counter++;
+				if (timeout_counter > 300) {
+					break;
+				}
+				pros::delay(10);
+      }
+			timeout_counter = 0;
+			arm_state = true;
 			four_bar.moveVelocity(0);
-			four_bar2.moveVelocity(0);
+    } else if (x && !y && arm_state) {
+      while (!four_bar_limit.isPressed()) {
+				timeout_counter++;
+        four_bar.moveVelocity(-200);
+				if (timeout_counter > 300) {
+					break;
+				}
+				pros::delay(10);
+      }
+			timeout_counter = 0;
+	    arm_state = false;
+      four_bar.moveVelocity(0);
+    }
+		y = x;
 
-			four_bar_running = false; //Indicate that the arm is no longer moving
-			four_bar_state = true; //Indicate that arm state is now up
-		} else if (four_bar_limit.isPressed() && four_bar_state) { //If bottom limit is pressed and arm is still considered up
-			four_bar.moveVelocity(0);
-			four_bar2.moveVelocity(0);
-
-			four_bar_running = false; //Indicate that the arm is no longer moving
-			four_bar_state = false; //Indicate that arm state is now down
-		} else { //If no limit is pressed but arm is running
-			if (!four_bar_state) { //If arm is marked as down, go up
-				four_bar.moveVelocity(100);
-				four_bar2.moveVelocity(100);
-			} else { //If arm is marked as up, go down
-				four_bar.moveVelocity(-100);
-				four_bar2.moveVelocity(-100);
-			}
-		}
+		pros::delay(10);
 	}
-
-	L1p = L1;
-
 }
+void back_arm_movement(void*) {
+	bool back_arm_state = true;
+	ControllerButton L2(ControllerDigital::L2);
 
-Motor back_arm(17);
-ADIButton back_arm_limit('C');
-ControllerButton buttonL2(ControllerDigital::L2);
-
-bool back_arm_running, L2, L2p = false;
-bool back_arm_state = true;
-
-void run_back_arm() {
 	back_arm.setBrakeMode(AbstractMotor::brakeMode::hold);
 
-	back_arm.setGearing(AbstractMotor::gearset::red);
+	bool x = false;
+	bool y = false;
 
-	L2 = buttonL2.isPressed();
+	int timeout_counter = 0;
 
-	if (L2 && L2p) {
-		back_arm_running = true; //On button press, activate movement
-	}
+	while (true) {
+		x = L2.isPressed();
+    if (x && !y && !back_arm_state) {
+      back_arm_state = true;
+      while (!back_arm_limit.isPressed()) {
+        back_arm.moveVelocity(200);
+				timeout_counter++;
+        if (back_arm.getPosition() > -1000 || timeout_counter > 300) {
+          break;
+        }
+				pros::delay(10);
+      }
+			timeout_counter = 0;
+      back_arm.moveVelocity(0);
+    } else if (x && !y && back_arm_state) {
+      back_arm_state = false;
+      while (back_arm.getPosition() > -3200) {
+				pros::lcd::print(6, "%d", timeout_counter);
+        back_arm.moveVelocity(-200);
+				timeout_counter++;
+				if (timeout_counter > 300) {
+					break;
+				}
+				pros::delay(10);
+      }
+			timeout_counter = 0;
+      back_arm.moveVelocity(0);
+    }
+		x = y;
+    pros::delay(10);
+  }
+}
+void pneumatics_movement(void*) {
+	bool pneumatics_state = false;
+	ControllerButton R1(ControllerDigital::R1);
 
-	if (back_arm_running) { //Run while movement is active
-		if ((back_arm_limit.isPressed() || back_arm.getPosition() > -1500) && !back_arm_state) { //If limit is pressed and arm is still considered down, or if the arm goes above the height threshold
-			back_arm.moveVelocity(0);
-
-			back_arm_running = false; //Indicate that the arm is no longer moving
-			back_arm_state = true; //Indicate that arm state is now up
-		} else if (back_arm_state && back_arm.getPosition() < -3200) { //If arm is below horizontal threshold and arm is still considered up
-			back_arm.moveVelocity(0);
-
-			back_arm_running = false; //Indicate that the arm is no longer moving
-			back_arm_state = false; //Indicate that arm state is now down
-		} else { //If arm is running
-			if (!back_arm_state) { //If arm is marked as down, go up
-				back_arm.moveVelocity(100);
-			} else { //If arm is marked as up, go down
-				back_arm.moveVelocity(-100);
-			}
+	bool x = false;
+	bool y = false;
+	while (true) {
+		x = R1.isPressed();
+		if (x && !y) {
+			pneumatics_state = !pneumatics_state;
+			front_pneumatics.set_value(pneumatics_state);
 		}
+		y = x;
+		pros::delay(10);
 	}
-
-	L2p = L2;
 }
+void intake_movement(void*) {
+	ControllerButton R2(ControllerDigital::R2);
+	bool intake_state = false;
 
-pros::ADIPort pneumatics(7, pros::E_ADI_DIGITAL_OUT);
-ControllerButton buttonR1(ControllerDigital::R1);
+	bool x = false;
+	bool y = false;
 
-bool pneumatics_closed, R1, R1p = false;
-
-void run_pneumatics() {
-	R1 = buttonR1.isPressed();
-
-	if (R1 && !R1p) { //If button pressed, toggle pnematics state
-		pneumatics_closed = !pneumatics_closed;
-		pneumatics.set_value(pneumatics_closed ? 1 : 0);
+	while (true) {
+		x = R2.isPressed();
+		if (x && !y) {
+			intake_state = !intake_state;
+			intake.moveVelocity(intake_state * 200);
+		}
+		y = x;
+		pros::delay(10);
 	}
-
-	R1p = R1;
 }
-
-Motor intake(7);
-ControllerButton buttonR2(ControllerDigital::R2);
-
-bool intake_active, R2, R2p = false;
-
-void run_intake() {
-	R2 = buttonR2.isPressed();
-
-	if (R2 && !R2p) { //If button pressed, toggle intake_active state
-
-		intake_active = !intake_active;
-		if (!four_bar_state && four_bar_limit.isPressed()) { //If four bar is down and limit is pressed, stop the intake
-			intake.moveVelocity(0);
+void driver_timer(void*) {
+	pros::Controller master(pros::E_CONTROLLER_MASTER);
+	int time = 1050;
+	while (time > 0) {
+		master.clear_line(0);
+		if ((time % 600 / 10) > 10) {
+			master.print(0, 0, "Time: %d:%d.%d", time >= 600, time % 600 / 10, time % 10);
 		} else {
-			intake.moveVelocity(intake_active ? 200 : 0);
+			master.print(0, 0, "Time: %d:0%d.%d", time >= 600, time % 600 / 10, time % 10);
+		}
+		pros::delay(100);
+		time--;
+		if (time == 450) {
+			master.rumble(".-.-.");
+		}
+		if (time == 300) {
+			master.rumble("-----");
 		}
 	}
+	master.print(0, 0, "Time: 0:00.0");
+}
 
-	R2p = R2;
+void on_center_button() {
+	static bool pressed = false;
+	pressed = !pressed;
+	if (pressed) {
+		pros::lcd::set_text(2, "I was pressed!");
+	} else {
+		pros::lcd::clear_line(2);
+	}
 }
 
 /**
@@ -154,7 +175,10 @@ void run_intake() {
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
+	pros::lcd::initialize();
+	pros::lcd::set_text(1, "Hello PROS User!");
 
+	pros::lcd::register_btn1_cb(on_center_button);
 }
 
 /**
@@ -162,7 +186,8 @@ void initialize() {
  * the VEX Competition Switch, following either autonomous or opcontrol. When
  * the robot is enabled, this task will exit.
  */
-void disabled() {}
+void disabled() {
+}
 
 /**
  * Runs after initialize(), and before autonomous when connected to the Field
@@ -174,6 +199,12 @@ void disabled() {}
  * starts.
  */
 void competition_initialize() {
+	back_arm.setGearing(AbstractMotor::gearset::red);
+	back_arm.setBrakeMode(AbstractMotor::brakeMode::hold);
+	four_bar.setGearing(AbstractMotor::gearset::red);
+	four_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
+	intake.setGearing(AbstractMotor::gearset::green);
+	intake.setBrakeMode(AbstractMotor::brakeMode::coast);
 }
 
 /**
@@ -188,11 +219,36 @@ void competition_initialize() {
  * from where it left off.
  */
 void autonomous() {
-	drive->setState({0_in, 0_in, 0_deg});
-	drive->driveToPoint({20_in, 0_in});
+	std::shared_ptr<OdomChassisController> chassis =
+		ChassisControllerBuilder()
+			.withMotors(
+				{-20, -15}, //-15
+				{9, 1} //1
+			)
+			.withDimensions(AbstractMotor::gearset::green, {{3.25_in, 15.2_in}, imev5GreenTPR})
+			.withGains(
+				{0.0025, 0.0001, 0.0001},
+				{0.002, 0, 0.0001},
+				{0.001, 0, 0.00}
+			)
+			.withOdometry()
+			.buildOdometry();
+
+	std::shared_ptr<AsyncMotionProfileController> profileController =
+		AsyncMotionProfileControllerBuilder()
+			.withLimits({3.0, 2.0, 10.0})
+			.withOutput(chassis)
+			.buildMotionProfileController();
+
+	chassis->setState({0_ft, 0_ft, -45_deg});
+	front_pneumatics.set_value(false);
+	chassis->driveToPoint({4.5_ft, -4.5_ft});
+	front_pneumatics.set_value(true);
+	four_bar.moveAbsolute(300, 100);
+	chassis->driveToPoint({2.3_ft, -2.3_ft}, true);
+	front_pneumatics.set_value(false);
+	chassis->driveToPoint({2.3_ft, -0.5_ft}, true);
 }
-
-
 /**
  * Runs the operator control code. This function will be started in its own task
  * with the default priority and stack size whenever the robot is enabled via
@@ -207,22 +263,32 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	pros::screen::erase();
+	//autonomous();
+	Controller controller;
+
+	pros::Task four_bar_task(four_bar_movement);
+	pros::Task back_arm_task(back_arm_movement);
+	pros::Task pneumatics_task(pneumatics_movement);
+	pros::Task intake_task(intake_movement);
+
+	if ((pros::competition::get_status() & (COMPETITION_CONNECTED == true)) && !pros::competition::is_autonomous()) {
+		pros::Task driver_timer_task(driver_timer);
+	}
+
+	std::shared_ptr<ChassisController> chassis =
+		ChassisControllerBuilder()
+			.withMotors(
+				{-20, -15}, //-15
+				{9, 1} //1
+			)
+			.withDimensions(AbstractMotor::gearset::green, {{3.25_in, 15.2_in}, imev5GreenTPR})
+			.build();
 
 	while (true) {
-		drive->getModel()->left(controller.getAnalog(ControllerAnalog::leftY));
-		drive->getModel()->right(controller.getAnalog(ControllerAnalog::rightY));
-		drive->getModel()->setBrakeMode(AbstractMotor::brakeMode::hold);
-
-		run_four_bar();
-		run_back_arm();
-		run_pneumatics();
-		run_intake();
-
-		if (buttonL1.isPressed()) {
-			//autonomous();
-		}
-
+		chassis->getModel()->tank(
+			controller.getAnalog(ControllerAnalog::leftY),
+			controller.getAnalog(ControllerAnalog::rightY)
+		);
 		pros::delay(10);
 	}
 }

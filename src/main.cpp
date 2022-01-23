@@ -4,11 +4,11 @@
 using namespace okapi;
 
 Motor back_arm(-14);
-MotorGroup four_bar({-10, 2});
+MotorGroup chain_bar({-10, 2});
 Motor intake(19);
 ADIButton back_arm_limit('F');
-ADIButton four_bar_limit('B');
-ADIButton four_bar_limit2('G');
+ADIButton chain_bar_limit('B');
+ADIButton chain_bar_limit2('G');
 
 /**
  * A callback function for LLEMU's center button.
@@ -16,13 +16,13 @@ ADIButton four_bar_limit2('G');
  * When this callback is fired, it will toggle line 2 of the LCD text between
  * "I was pressed!" and nothing.
  */
-void four_bar_movement(void*) {
+void chain_bar_movement(void*) {
 	bool arm_state = true;
 
 	ControllerButton L1(ControllerDigital::L1);
 	ControllerButton Up(ControllerDigital::up);
 	ControllerButton Left(ControllerDigital::left);
-	four_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
+	chain_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
 
 	bool x = false;
 	bool y = false;
@@ -33,8 +33,8 @@ void four_bar_movement(void*) {
 		x = L1.isPressed();
 
     if (x && !y && !arm_state) {
-      while (!four_bar_limit2.isPressed()) {
-        four_bar.moveVelocity(200);
+      while (!chain_bar_limit2.isPressed()) {
+        chain_bar.moveVelocity(200);
 				timeout_counter++;
 				if (timeout_counter > 300) {
 					break;
@@ -43,11 +43,11 @@ void four_bar_movement(void*) {
       }
 			timeout_counter = 0;
 			arm_state = true;
-			four_bar.moveVelocity(0);
+			chain_bar.moveVelocity(0);
     } else if (x && !y && arm_state) {
-      while (!four_bar_limit.isPressed()) {
+      while (!chain_bar_limit.isPressed()) {
 				timeout_counter++;
-        four_bar.moveVelocity(-200);
+        chain_bar.moveVelocity(-200);
 				if (timeout_counter > 300) {
 					break;
 				}
@@ -55,14 +55,14 @@ void four_bar_movement(void*) {
       }
 			timeout_counter = 0;
 	    arm_state = false;
-      four_bar.moveVelocity(0);
+      chain_bar.moveVelocity(0);
     }
 		y = x;
 		if (Up.isPressed()) {
-			four_bar.moveAbsolute(1600, 200);
-			pros::lcd::print(2, "%d", four_bar.getPosition());
+			chain_bar.moveAbsolute(1600, 200);
+			pros::lcd::print(2, "%d", chain_bar.getPosition());
 		}
-		four_bar.moveVelocity((Up.isPressed() * !four_bar_limit2.isPressed() - Left.isPressed() * !four_bar_limit.isPressed()) * 200);
+		chain_bar.moveVelocity((Up.isPressed() * !chain_bar_limit2.isPressed() - Left.isPressed() * !chain_bar_limit.isPressed()) * 200);
 		pros::lcd::print(4, "%d", (Up.isPressed() - Left.isPressed()) * 200);
 		pros::delay(10);
 	}
@@ -190,11 +190,8 @@ void on_center_button() {
 	}
 }
 
-double dtor(double angle) {
-	return angle * PI / 180;
-}
 bool recalibrate(double current_angle, double threshold) {
-
+	return false;
 }
 
 class CustomOdometry {
@@ -202,6 +199,7 @@ class CustomOdometry {
 		double x = 0;
 		double y = 0;
 		double angle = 0;
+		bool in_motion = false;
 
 		void tick(double left_position, double right_position) {
 			calculate_encoder_change(left_position, right_position);
@@ -210,9 +208,96 @@ class CustomOdometry {
 			calculate_position();
 		}
 
+		double dtor(double angle) {
+      return angle * PI / 180;
+    }
+
+		double normalize_angle(double angle) {
+			return fmod(angle, PI * 2);
+		}
+
+		double transform_angle(double angle) {
+			return angle + PI / 2;
+		}
+
+		double dist(double x1, double y1, double x2, double y2) {
+			return sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+		}
+
+		double constrain(double value, double low, double high) {
+			return fmin(fmax(value, low), high);
+		}
+
+		void driveToPoint(double x_, double y_, double target_velocity, double threshold = 0.2) {
+			target_x = x_;
+			target_y = y_;
+			target_angle = atan2f(target_y - y, target_x - x);
+			initial_x = x_;
+			initial_y = y_;
+
+			MotorGroup left_drive({-1, -6});
+			MotorGroup right_drive({11, 16});
+
+			do {
+				in_motion = true;
+				difference_x = target_x - x;
+				difference_y = target_y - y;
+
+				distance_remaining = dist(x, y, target_x, target_y) / dist(target_x, target_y, initial_x, initial_y);
+				difference_angle = transform_angle(angle) - target_angle;
+
+				left_speed = target_velocity - difference_angle * kp + distance_remaining * kp_distance;
+				right_speed = target_velocity + difference_angle * kp + distance_remaining * kp_distance;
+				constrain(left_speed, -1, 1);
+				constrain(right_speed, -1, 1);
+
+				left_drive.moveVoltage(left_speed * 12000);
+				right_drive.moveVoltage(right_speed * 12000);
+			}
+			while (abs(difference_x) < threshold && abs(difference_y) < threshold);
+
+			left_drive.moveVoltage(target_velocity * 12000);
+			right_drive.moveVelocity(target_velocity * 12000);
+
+			in_motion = false;
+		}
+
+		void reverseToPoint(double x_, double y_, double target_velocity, double threshold = 0.2) {
+			target_x = x_;
+			target_y = y_;
+			target_angle = fmod(atan2f(target_y - y, target_x - x) + PI, 2 * PI);
+			initial_x = x_;
+			initial_y = y_;
+
+			MotorGroup left_drive({-1, -6});
+			MotorGroup right_drive({11, 16});
+
+			do {
+				in_motion = true;
+				difference_x = target_x - x;
+				difference_y = target_y - y;
+
+				distance_remaining = dist(x, y, target_x, target_y) / dist(target_x, target_y, initial_x, initial_y);
+				difference_angle = transform_angle(angle) - target_angle;
+
+				left_speed = target_velocity - difference_angle * kp + distance_remaining * kp_distance;
+				right_speed = target_velocity + difference_angle * kp + distance_remaining * kp_distance;
+				constrain(left_speed, -1, 1);
+				constrain(right_speed, -1, 1);
+
+				left_drive.moveVoltage(left_speed * 12000);
+				right_drive.moveVoltage(right_speed * 12000);
+			}
+			while (abs(difference_x) < threshold && abs(difference_y) < threshold);
+
+			left_drive.moveVoltage(target_velocity * 12000);
+			right_drive.moveVelocity(target_velocity * 12000);
+
+			in_motion = false;
+		}
 
 	private:
-		const double track_width = 16.25;
+		const double track_width = 14.685;
 		const double wheel_radius = 4.125;
 
 		double left_encoder = 0;
@@ -225,22 +310,43 @@ class CustomOdometry {
 
 		double delta_angle = (delta_right - delta_left) / track_width;
 		double turn_radius = (delta_left / delta_angle) + (track_width / 2);
+		double chord_length = 2 * turn_radius * sin(delta_angle / 2);
 
 		double delta_x = turn_radius * cos(delta_angle) - turn_radius;
 		double delta_y = turn_radius * sin(delta_angle);
 
+		double target_x = 0;
+		double target_y = 0;
+		double target_angle = 0;
+		double difference_x = 0;
+		double difference_y = 0;
+		double initial_x = 0;
+		double initial_y = 0;
+
+		double distance_remaining = 1;
+		double difference_angle = 0;
+
+		double left_speed = 0;
+		double right_speed = 0;
+
+		double kp = 0.2;
+		double kp_distance = 1.2;
+
 		void calculate_encoder_change(double left_position, double right_position) {
 			left_encoder = left_position;
 			right_encoder = right_position;
-			delta_left = left_encoder_previous - left_encoder;
-			delta_right = right_encoder_previous - right_encoder;
+			delta_left = left_encoder - left_encoder_previous;
+			delta_right = right_encoder - right_encoder_previous;
 			left_encoder_previous = left_encoder;
 			right_encoder_previous = right_encoder;
 		}
+
 		void rtoi_deltas() {
 			delta_left = dtor(delta_left) * wheel_radius;
 			delta_right = dtor(delta_right) * wheel_radius;
+			std::cout << "\nDistances calculated, left: " << delta_left << ", right: " << delta_right;
 		}
+
 		void calculate_angles() {
 			delta_angle = (delta_right - delta_left) / track_width;
 			if (delta_angle != 0) {
@@ -248,25 +354,34 @@ class CustomOdometry {
 			} else {
 				turn_radius = 0;
 			}
+			std::cout << "\nTurn radius: " << turn_radius;
+			std::cout << "\nDelta angle: " << delta_angle;
 			angle += delta_angle;
 		}
+
 		void calculate_position() {
 			if (turn_radius != 0) {
-				delta_x = turn_radius * cos(delta_angle) - turn_radius;
-				delta_y = turn_radius * sin(delta_angle);
+				chord_length = 2 * turn_radius * sin(delta_angle / 2);
 			} else {
-				delta_x = cos(angle);
-				delta_y = sin(angle);
+				chord_length = (delta_left + delta_right) / 2;
 			}
+
+			delta_x = chord_length * cos(angle);
+			delta_y = chord_length * sin(angle);
+
+			std::cout << "\nPosition change calculated, x: " << delta_x << ", y: " << delta_y << "\n";
 			x += delta_x;
 			y += delta_y;
 		}
 };
 
+CustomOdometry odom;
+
 void odometry() {
 	//counterclockwise -> +angle
 	//units: inches/radians
 	//dtor: degree->radian conversion
+	//all calculations assume that 0 radian heading is +x axis
 
 	/*
 	 -+ |	++
@@ -275,11 +390,11 @@ void odometry() {
 	*/
 	MotorGroup left_drive({-1, -6});
 	MotorGroup right_drive({11, 16});
-
-	CustomOdometry odom;
+	left_drive.setEncoderUnits(AbstractMotor::encoderUnits::degrees);
+	right_drive.setEncoderUnits(AbstractMotor::encoderUnits::degrees);
 
 	while (true) {
-
+		odom.tick(left_drive.getPosition(), right_drive.getPosition());
 		pros::delay(5);
 	}
 }
@@ -317,8 +432,8 @@ void disabled() {
 void competition_initialize() {
 	back_arm.setGearing(AbstractMotor::gearset::red);
 	back_arm.setBrakeMode(AbstractMotor::brakeMode::hold);
-	four_bar.setGearing(AbstractMotor::gearset::red);
-	four_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
+	chain_bar.setGearing(AbstractMotor::gearset::red);
+	chain_bar.setBrakeMode(AbstractMotor::brakeMode::hold);
 	intake.setGearing(AbstractMotor::gearset::green);
 	intake.setBrakeMode(AbstractMotor::brakeMode::coast);
 }
@@ -357,27 +472,11 @@ void autonomous() {
 			.buildMotionProfileController();
 
 	pros::ADIPort front_pneumatics ('H', pros::E_ADI_DIGITAL_OUT);
-	chassis->setState({0_ft, 0_ft, -45_deg});
 	front_pneumatics.set_value(false);
-	chassis->driveToPoint({4.5_ft, -4.3_ft});
-	pros::delay(200);
-	front_pneumatics.set_value(true);
-	four_bar.moveAbsolute(300, 100);
-	back_arm.moveAbsolute(-3250, -100);
-	chassis->driveToPoint({2.2_ft, -2.3_ft}, true);
-	front_pneumatics.set_value(false);
-	chassis->driveToPoint({2.6_ft, -0.6_ft}, true);
-	pros::Task back_arm_auton(auton_back_arm);
-	four_bar.moveAbsolute(0, 100);
-	pros::delay(1000);
-	chassis->driveToPoint({5_ft, -1.9_ft}, false);
-	front_pneumatics.set_value(true);
-	intake.moveVelocity(200);
-	four_bar.moveAbsolute(800, 100);
-	chassis->moveDistance(-4_ft);
-	pros::delay(500);
-	back_arm.moveAbsolute(-3200, 200);
+	pros::Task odometry_task(odometry);
+	odom.driveToPoint();
 }
+
 /**
  * Runs the operator control code. This function will be started in its own task
  * with the default priority and stack size whenever the robot is enabled via
@@ -395,7 +494,7 @@ void opcontrol() {
 	//autonomous();
 	Controller controller;
 
-	pros::Task four_bar_task(four_bar_movement);
+	pros::Task chain_bar_task(chain_bar_movement);
 	pros::Task back_arm_task(back_arm_movement);
 	pros::Task pneumatics_task(pneumatics_movement);
 	pros::Task intake_task(intake_movement);

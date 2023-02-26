@@ -173,8 +173,8 @@
 				p = math.matrix(p);
 
 				var main_inverse = math.inv(main);
-				var _output = math.multiply(p, main_inverse);
-				var output = math.multiply(p, main_inverse);
+				var _output = math.multiply(main_inverse, p);
+				var output = math.multiply(main_inverse, p);
 
 				var stats = [];
 				for (var i = 0; i < num_teams; i++) {
